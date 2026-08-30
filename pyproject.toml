@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "semantic-search-platform"
+version = "1.0.0"
+description = "A tested Flask, SQLite, and FAISS semantic retrieval service with hybrid recency ranking."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "Soham Jindal"}]
+dependencies = [
+  "Flask>=3.1,<4",
+  "numpy>=2.0,<3",
+  "faiss-cpu>=1.9,<2; python_version < '3.14'",
+  "gunicorn>=23,<24",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3,<9", "pytest-cov>=6,<7"]
+
+[project.scripts]
+semantic-search = "semantic_search.api:main"
+semantic-search-benchmark = "semantic_search.benchmark:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["semantic_search"]
+branch = true
+omit = ["src/semantic_search/benchmark.py"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 85

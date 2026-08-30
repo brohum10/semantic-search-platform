@@ -1,0 +1,11 @@
+{
+  "backend": "faiss",
+  "dimension": 512,
+  "indexing_seconds": 3.786,
+  "messages": 100000,
+  "mrr": 0.9473,
+  "p50_ms": 4.793,
+  "p95_ms": 5.196,
+  "queries": 500,
+  "recall_at_10": 0.98
+}
