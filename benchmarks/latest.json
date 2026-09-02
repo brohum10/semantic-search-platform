@@ -1,11 +1,14 @@
 {
   "backend": "faiss",
   "dimension": 512,
-  "indexing_seconds": 3.786,
+  "indexing_messages_per_second": 12649.6,
+  "indexing_seconds": 7.905,
   "messages": 100000,
-  "mrr": 0.9473,
-  "p50_ms": 4.793,
-  "p95_ms": 5.196,
+  "mrr": 1.0,
+  "p50_ms": 14.728,
+  "p95_ms": 16.625,
+  "p99_ms": 19.697,
   "queries": 500,
-  "recall_at_10": 0.98
+  "query_throughput_per_second": 65.8,
+  "recall_at_10": 1.0
 }

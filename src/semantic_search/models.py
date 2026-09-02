@@ -20,6 +20,8 @@ class SearchResult:
     recency: float
     lexical: float
     score: float
+    matched_terms: tuple[str, ...]
+    explanation: dict[str, float]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -31,4 +33,6 @@ class SearchResult:
             "recency": round(self.recency, 6),
             "lexical": round(self.lexical, 6),
             "score": round(self.score, 6),
+            "matched_terms": list(self.matched_terms),
+            "explanation": {key: round(value, 6) for key, value in self.explanation.items()},
         }

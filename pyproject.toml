@@ -4,21 +4,35 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "semantic-search-platform"
-version = "1.0.0"
-description = "A tested Flask, SQLite, and FAISS semantic retrieval service with hybrid recency ranking."
+version = "2.0.0"
+description = "An explainable hybrid search service with dense retrieval, BM25, metadata filters, and source-backed responses."
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = "MIT"
 authors = [{name = "Soham Jindal"}]
+keywords = ["information-retrieval", "semantic-search", "bm25", "faiss", "flask"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Framework :: Flask",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
 dependencies = [
   "Flask>=3.1,<4",
   "numpy>=2.0,<3",
-  "faiss-cpu>=1.9,<2; python_version < '3.14'",
   "gunicorn>=23,<24",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3,<9", "pytest-cov>=6,<7"]
+faiss = ["faiss-cpu>=1.9,<2; python_version < '3.14'"]
+dev = ["pytest>=8.3,<9", "pytest-cov>=6,<8", "ruff>=0.12,<1"]
+
+[project.urls]
+Homepage = "https://github.com/brohum10/semantic-search-platform"
+Repository = "https://github.com/brohum10/semantic-search-platform"
+Issues = "https://github.com/brohum10/semantic-search-platform/issues"
 
 [project.scripts]
 semantic-search = "semantic_search.api:main"
@@ -30,6 +44,13 @@ where = ["src"]
 [tool.pytest.ini_options]
 addopts = "-q --strict-markers"
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.coverage.run]
 source = ["semantic_search"]

@@ -5,6 +5,17 @@ services:
       - "8080:8080"
     volumes:
       - search-data:/data
+    environment:
+      SEARCH_DATABASE: /data/messages.db
+      SEARCH_MAX_REQUEST_BYTES: 1048576
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/v1/health', timeout=2)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
 
 volumes:
   search-data:

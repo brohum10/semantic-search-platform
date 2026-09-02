@@ -1,24 +1,43 @@
-# Semantic Search & Response Platform
+# Semantic Search Platform
 
 [![CI](https://github.com/brohum10/semantic-search-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/brohum10/semantic-search-platform/actions/workflows/ci.yml)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB.svg)](https://www.python.org/)
-[![Flask](https://img.shields.io/badge/Flask-3.x-000000.svg)](https://flask.palletsprojects.com/)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](https://www.python.org/)
+[![Coverage 95%+](https://img.shields.io/badge/coverage-95%25%2B-brightgreen.svg)](#quality)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A local-first retrieval service that persists messages in SQLite, indexes normalized vectors with FAISS, reranks results with recency, and exposes search plus source-backed extractive responses through Flask.
+An explainable, local-first retrieval service that combines dense vector similarity, BM25 lexical relevance, recency, and structured filters. Messages are durable in SQLite, vectors use FAISS when available (with an exact NumPy fallback), and every result shows why it ranked.
 
-## What it demonstrates
+## Why this is more than a vector-search demo
 
-- Batch and single-message ingestion with input and metadata validation
-- Deterministic vector embeddings with a replaceable model boundary
-- FAISS inner-product search with a NumPy fallback
-- Hybrid candidate reranking using semantic similarity, recency, and lexical overlap
-- SQLite persistence in WAL mode with parameterized queries
-- Search and extractive-response endpoints that always return their sources
-- Automated tests, coverage enforcement, Docker, CI, and a deterministic benchmark
+- **Hybrid retrieval:** unions dense and lexical candidates before reranking, so exact IDs such as `INC-4812` are not lost to embedding behavior.
+- **Explainable ranking:** returns raw cosine/BM25 values, matched terms, and each weighted score contribution.
+- **Structured filtering:** supports nested metadata equality plus inclusive creation-time windows without bypassing ranking.
+- **Complete document lifecycle:** durable batch ingestion, point lookup, deletion, and deterministic in-memory index reconstruction on restart.
+- **Source-grounded responses:** creates query-focused extractive answers with citations and an explicit confidence band—no fabricated generation.
+- **Operational boundaries:** one-megabyte request limit, 1,000-message batch cap, bounded result sizes, consistent JSON errors, request IDs, health checks, and runtime statistics.
+- **Portable deployment:** zero external services by default, optional FAISS acceleration, non-root Docker runtime, persistent volumes, and health checks.
+
+## System at a glance
+
+```mermaid
+flowchart LR
+    Client --> API[Flask API]
+    API --> Service[Search service]
+    Service --> SQLite[(SQLite / WAL)]
+    Service --> Dense[Hashing embeddings<br/>FAISS or NumPy]
+    Service --> BM25[BM25 inverted index]
+    Dense --> Union[Candidate union]
+    BM25 --> Union
+    Union --> Filter[Metadata + time filters]
+    Filter --> Rank[Explainable reranker]
+    Rank --> Results[Results / grounded response]
+```
+
+The full design, consistency model, scoring formula, complexity, and scale-out path are in [docs/architecture.md](docs/architecture.md). The HTTP contract is captured in [docs/openapi.yaml](docs/openapi.yaml).
 
 ## Quick start
 
-Requirements: Python 3.11 or newer.
+Requires Python 3.11 or newer.
 
 ```bash
 python -m venv .venv
@@ -27,51 +46,78 @@ python -m pip install -e '.[dev]'
 semantic-search
 ```
 
+Install the optional FAISS backend with `python -m pip install -e '.[dev,faiss]'`. Without it, the service automatically uses exact NumPy search.
+
 Index a message:
 
 ```bash
 curl -X POST http://localhost:8080/v1/messages \
   -H 'Content-Type: application/json' \
-  -d '{"content":"Retries use capped exponential backoff.","metadata":{"source":"runbook"}}'
+  -d '{
+    "content": "Retries use capped exponential backoff and idempotency keys.",
+    "metadata": {"team": {"name": "platform"}, "environment": "production"}
+  }'
 ```
 
-Search:
+Run a filtered hybrid search:
 
 ```bash
-curl 'http://localhost:8080/v1/search?q=how+do+retries+work&limit=5'
-```
-
-Create a source-backed extractive response:
-
-```bash
-curl -X POST http://localhost:8080/v1/respond \
+curl -X POST http://localhost:8080/v1/search \
   -H 'Content-Type: application/json' \
-  -d '{"query":"How should failed requests be retried?","limit":3}'
+  -d '{
+    "query": "How should production writes be retried?",
+    "limit": 5,
+    "filters": {
+      "metadata": {"team.name": "platform"},
+      "created_after": "2026-01-01T00:00:00Z"
+    }
+  }'
 ```
 
-Docker is also supported:
+Each result includes `similarity`, normalized `lexical` and `recency` signals, `matched_terms`, the final `score`, and an `explanation` with individual contributions.
+
+## API
+
+| Method | Route | Purpose |
+|---|---|---|
+| `POST` | `/v1/messages` | Validate and index one message |
+| `POST` | `/v1/messages/bulk` | Index up to 1,000 messages in one SQLite transaction |
+| `GET` | `/v1/messages/{id}` | Fetch one durable message |
+| `DELETE` | `/v1/messages/{id}` | Delete a message from storage and both indexes |
+| `GET` | `/v1/search?q=...&limit=...` | Simple hybrid search |
+| `POST` | `/v1/search` | Hybrid search with nested metadata and time filters |
+| `POST` | `/v1/respond` | Query-focused extractive response with ranked sources |
+| `GET` | `/v1/health` | Liveness, document count, and vector backend |
+| `GET` | `/v1/stats` | Index size, vocabulary, dimensions, and ranking weights |
+
+Error responses use a stable shape such as `{"error":{"code":"invalid_request","message":"..."}}`. Every response also carries an `X-Request-ID`; callers may supply their own for correlation.
+
+## Configuration
+
+| Environment variable | Default | Purpose |
+|---|---:|---|
+| `SEARCH_DATABASE` | `data/messages.db` | SQLite database path |
+| `SEARCH_MAX_REQUEST_BYTES` | `1048576` | Maximum HTTP request size |
+| `PORT` | `8080` | Development server port |
+
+For a containerized run:
 
 ```bash
 docker compose up --build
 ```
 
-## Architecture
+The Compose volume retains the database across restarts. In-memory indexes are rebuilt deterministically from SQLite during startup.
 
-```text
-Flask API -> validation -> embedding -> FAISS/NumPy candidate search
-                      |-> SQLite persistence
-                      `-> similarity + recency reranking -> results / extractive response
-```
-
-See [docs/architecture.md](docs/architecture.md) for the component diagram, ranking formula, design choices, and production extensions.
-
-## Tests
+## Quality
 
 ```bash
+python -m pip install -e '.[dev]'
+ruff format --check .
+ruff check .
 pytest --cov=semantic_search --cov-report=term-missing
 ```
 
-The suite covers deterministic embeddings, nearest-neighbor ordering, SQLite round trips, hybrid ranking, content validation, extractive responses, and the public API. Coverage must remain at or above 85%.
+The suite contains 32 deterministic tests and enforces at least 85% branch coverage (the current implementation exceeds 95%). CI runs linting and tests on Python 3.11, 3.12, and 3.13 and separately verifies the production container build.
 
 ## Reproducible benchmark
 
@@ -79,33 +125,26 @@ The suite covers deterministic embeddings, nearest-neighbor ordering, SQLite rou
 semantic-search-benchmark \
   --messages 100000 \
   --queries 500 \
+  --dimension 512 \
   --output benchmarks/latest.json
 ```
 
-The benchmark generates a labeled synthetic corpus, indexes it through the same service path used by the API, and reports indexing time, Recall@10, MRR, p50 latency, and p95 latency. `benchmarks/latest.json` contains the latest measured run; it is not a hand-edited performance claim.
+The benchmark indexes a deterministic labeled corpus through the same service path as the API and measures Recall@10, mean reciprocal rank, throughput, and p50/p95/p99 query latency.
 
-Latest local run on an arm64 Mac (August 30, 2026):
+Latest local run on an arm64 Mac (September 1, 2026):
 
-| Messages | Queries | Indexing | Recall@10 | MRR | p50 | p95 |
-|---:|---:|---:|---:|---:|---:|---:|
-| 100,000 | 500 | 3.786 s | 0.9800 | 0.9473 | 4.793 ms | 5.196 ms |
+| Documents | Queries | Indexing throughput | Recall@10 | MRR | p50 | p95 | p99 |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100,000 | 500 | 12,649.6 docs/s | 1.0000 | 1.0000 | 14.728 ms | 16.625 ms | 19.697 ms |
 
-The corpus is deterministic and synthetic, so these figures validate implementation performance and metric calculation rather than claiming production relevance quality on a real user dataset.
+[benchmarks/latest.json](benchmarks/latest.json) is generated by that command; it is not a hand-edited performance claim. Synthetic results demonstrate implementation behavior, not relevance on a production dataset.
 
-## API
+## Deliberate tradeoffs
 
-| Method | Route | Purpose |
-|---|---|---|
-| `POST` | `/v1/messages` | Validate and index one message |
-| `POST` | `/v1/messages/bulk` | Index a batch in one SQLite transaction |
-| `GET` | `/v1/search?q=...&limit=...` | Retrieve and rerank relevant messages |
-| `POST` | `/v1/respond` | Compose an extractive response with sources |
-| `GET` | `/v1/health` | Report status, message count, and vector backend |
+The built-in feature-hashing embedder makes the entire project reproducible without model downloads, API keys, or network access. It is an engineering baseline, not a claim that feature hashing outperforms neural embeddings. The embedding boundary can be replaced by a sentence-transformer or hosted model without changing storage, BM25 retrieval, filters, reranking, tests, or the API contract.
 
-## Design note
-
-The default embedder uses deterministic feature hashing so the project works without external model downloads or API keys. The interface is intentionally small: a neural sentence-embedding adapter can replace it without changing persistence, FAISS search, ranking, tests, or the HTTP contract.
+SQLite plus exact indexes are an excellent fit for a single-node corpus. The architecture document explains the migration path to PostgreSQL, object-backed snapshots, background indexing, approximate nearest-neighbor search, and replicated stateless API workers when the workload outgrows that boundary.
 
 ## License
 
-MIT
+[MIT](LICENSE)

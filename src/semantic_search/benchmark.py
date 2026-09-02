@@ -30,19 +30,22 @@ def run_benchmark(messages: int, queries: int, dimension: int) -> dict[str, Any]
     for message_id in range(messages):
         topic_id = message_id % 100
         topic = topics[topic_id % len(topics)]
-        payloads.append({
-            "content": (
-                f"topic{topic_id} {topic} engineering note {message_id}. "
-                "Includes implementation details, validation checks, and measurable outcomes."
-            ),
-            "created_at": (now - timedelta(minutes=message_id % 43_200)).isoformat(),
-            "metadata": {"topic": topic_id, "source": "synthetic-benchmark"},
-        })
+        payloads.append(
+            {
+                "content": (
+                    f"topic{topic_id} {topic} engineering note {message_id}. "
+                    "Includes implementation details, validation checks, and measurable outcomes."
+                ),
+                "created_at": (now - timedelta(minutes=message_id % 43_200)).isoformat(),
+                "metadata": {"topic": topic_id, "source": "synthetic-benchmark"},
+            }
+        )
 
     with tempfile.TemporaryDirectory(prefix="semantic-search-benchmark-") as temporary:
         service = SearchService(Path(temporary) / "benchmark.db", dimension=dimension)
         index_started = time.perf_counter()
-        service.add_messages(payloads)
+        for start in range(0, len(payloads), 1_000):
+            service.add_messages(payloads[start : start + 1_000])
         indexing_seconds = time.perf_counter() - index_started
         latencies_ms: list[float] = []
         reciprocal_ranks: list[float] = []
@@ -50,7 +53,9 @@ def run_benchmark(messages: int, queries: int, dimension: int) -> dict[str, Any]
         for query_id in range(queries):
             topic_id = query_id % 100
             started = time.perf_counter_ns()
-            results = service.search(f"topic{topic_id} implementation validation", limit=10, now=now)
+            results = service.search(
+                f"topic{topic_id} implementation validation", limit=10, now=now
+            )
             latencies_ms.append((time.perf_counter_ns() - started) / 1_000_000)
             relevant_positions = [
                 position
@@ -70,10 +75,13 @@ def run_benchmark(messages: int, queries: int, dimension: int) -> dict[str, Any]
         "dimension": dimension,
         "backend": service.backend,
         "indexing_seconds": round(indexing_seconds, 3),
+        "indexing_messages_per_second": round(messages / indexing_seconds, 1),
         "recall_at_10": round(recall_hits / queries, 4),
         "mrr": round(statistics.mean(reciprocal_ranks), 4),
         "p50_ms": round(_percentile(ordered, 0.50), 3),
         "p95_ms": round(_percentile(ordered, 0.95), 3),
+        "p99_ms": round(_percentile(ordered, 0.99), 3),
+        "query_throughput_per_second": round(1_000 / statistics.mean(latencies_ms), 1),
     }
 
 

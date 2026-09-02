@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from semantic_search.vector_index import VectorIndex
 
@@ -24,3 +25,25 @@ def test_faiss_backend_and_validation() -> None:
     assert index.search(np.asarray([1, 0], dtype=np.float32), 0) == []
     with np.testing.assert_raises(ValueError):
         index.add([2], np.asarray([[1, 0, 0]], dtype=np.float32))
+
+
+def test_index_scores_arbitrary_candidates_and_supports_deletion() -> None:
+    index = VectorIndex(2, prefer_faiss=False)
+    index.add([10, 20], np.asarray([[1, 0], [0, 1]], dtype=np.float32))
+
+    scores = index.similarities(np.asarray([0.8, 0.2], dtype=np.float32), {10, 20, 404})
+
+    assert scores == {10: pytest.approx(0.8), 20: pytest.approx(0.2)}
+    assert index.remove(404) is False
+    assert index.remove(10) is True
+    assert [item.message_id for item in index.search(np.asarray([1, 0], dtype=np.float32), 5)] == [
+        20
+    ]
+    assert index.similarities(np.asarray([1, 0], dtype=np.float32), set()) == {}
+
+
+def test_index_rejects_duplicate_ids() -> None:
+    index = VectorIndex(2, prefer_faiss=False)
+    index.add([1], np.asarray([[1, 0]], dtype=np.float32))
+    with np.testing.assert_raises(ValueError):
+        index.add([1], np.asarray([[0, 1]], dtype=np.float32))

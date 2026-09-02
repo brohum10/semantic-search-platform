@@ -1,0 +1,266 @@
+openapi: 3.1.0
+info:
+  title: Semantic Search Platform API
+  version: 2.0.0
+  description: Explainable hybrid retrieval over durable messages.
+servers:
+  - url: http://localhost:8080
+paths:
+  /v1/health:
+    get:
+      summary: Check service health
+      responses:
+        "200":
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /v1/stats:
+    get:
+      summary: Inspect index statistics and ranking configuration
+      responses:
+        "200":
+          description: Current statistics
+  /v1/messages:
+    post:
+      summary: Index one message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "201":
+          description: Message created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+  /v1/messages/bulk:
+    post:
+      summary: Index up to 1,000 messages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messages]
+              properties:
+                messages:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items:
+                    $ref: "#/components/schemas/MessageInput"
+      responses:
+        "201":
+          description: Batch created
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+  /v1/messages/{message_id}:
+    parameters:
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      summary: Fetch one message
+      responses:
+        "200":
+          description: Stored message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete one message and its index entries
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /v1/search:
+    get:
+      summary: Run a simple hybrid search
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        "200":
+          description: Ranked search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+    post:
+      summary: Search with metadata and time filters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchRequest"
+      responses:
+        "200":
+          description: Ranked and filtered results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+  /v1/respond:
+    post:
+      summary: Build an extractive answer and include its ranked sources
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 50
+                  default: 3
+      responses:
+        "200":
+          description: Source-grounded extractive answer
+components:
+  schemas:
+    MessageInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        created_at:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          additionalProperties: true
+    Message:
+      allOf:
+        - $ref: "#/components/schemas/MessageInput"
+        - type: object
+          required: [id, created_at, metadata]
+          properties:
+            id:
+              type: integer
+    SearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 10
+        filters:
+          type: object
+          properties:
+            metadata:
+              type: object
+              description: Exact equality filters; dot-separated keys traverse nested objects.
+            created_after:
+              type: string
+              format: date-time
+            created_before:
+              type: string
+              format: date-time
+    SearchResponse:
+      type: object
+      required: [query, count, results]
+      properties:
+        query:
+          type: string
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            type: object
+            required: [id, content, score, explanation]
+            properties:
+              id:
+                type: integer
+              content:
+                type: string
+              score:
+                type: number
+              matched_terms:
+                type: array
+                items:
+                  type: string
+              explanation:
+                type: object
+                additionalProperties:
+                  type: number
+    Health:
+      type: object
+      required: [status, messages, vector_backend]
+      properties:
+        status:
+          const: ok
+        messages:
+          type: integer
+        vector_backend:
+          enum: [faiss, numpy]
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+  responses:
+    InvalidRequest:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Message does not exist
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

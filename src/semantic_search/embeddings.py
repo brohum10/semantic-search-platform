@@ -26,7 +26,9 @@ class HashingEmbedder:
 
     def embed(self, text: str) -> NDArray[np.float32]:
         tokens = TOKEN_PATTERN.findall(text.lower())
-        features = tokens + [f"{left}_{right}" for left, right in zip(tokens, tokens[1:])]
+        features = tokens + [
+            f"{left}_{right}" for left, right in zip(tokens, tokens[1:], strict=False)
+        ]
         counts = Counter(features)
         vector = np.zeros(self.dimension, dtype=np.float32)
         for feature, count in counts.items():
