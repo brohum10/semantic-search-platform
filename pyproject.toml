@@ -27,7 +27,7 @@ dependencies = [
 
 [project.optional-dependencies]
 faiss = ["faiss-cpu>=1.9,<2; python_version < '3.14'"]
-dev = ["pytest>=8.3,<9", "pytest-cov>=6,<8", "ruff>=0.12,<1"]
+dev = ["build>=1.2,<2", "pytest>=8.3,<9", "pytest-cov>=6,<8", "ruff>=0.12,<1"]
 
 [project.urls]
 Homepage = "https://github.com/brohum10/semantic-search-platform"
