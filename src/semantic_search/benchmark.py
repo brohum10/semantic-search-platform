@@ -49,7 +49,8 @@ def run_benchmark(messages: int, queries: int, dimension: int) -> dict[str, Any]
         indexing_seconds = time.perf_counter() - index_started
         latencies_ms: list[float] = []
         reciprocal_ranks: list[float] = []
-        recall_hits = 0
+        query_hits = 0
+        precision_scores: list[float] = []
         for query_id in range(queries):
             topic_id = query_id % 100
             started = time.perf_counter_ns()
@@ -62,8 +63,9 @@ def run_benchmark(messages: int, queries: int, dimension: int) -> dict[str, Any]
                 for position, result in enumerate(results, start=1)
                 if result.message.metadata.get("topic") == topic_id
             ]
+            precision_scores.append(len(relevant_positions) / max(1, len(results)))
             if relevant_positions:
-                recall_hits += 1
+                query_hits += 1
                 reciprocal_ranks.append(1.0 / relevant_positions[0])
             else:
                 reciprocal_ranks.append(0.0)
@@ -76,8 +78,11 @@ def run_benchmark(messages: int, queries: int, dimension: int) -> dict[str, Any]
         "backend": service.backend,
         "indexing_seconds": round(indexing_seconds, 3),
         "indexing_messages_per_second": round(messages / indexing_seconds, 1),
-        "recall_at_10": round(recall_hits / queries, 4),
-        "mrr": round(statistics.mean(reciprocal_ranks), 4),
+        # Each topic has many relevant documents. "Any relevant result in the
+        # top 10" is a query hit rate, not standard document Recall@10.
+        "hit_rate_at_10": round(query_hits / queries, 4),
+        "precision_at_10": round(statistics.mean(precision_scores), 4),
+        "mrr_at_10": round(statistics.mean(reciprocal_ranks), 4),
         "p50_ms": round(_percentile(ordered, 0.50), 3),
         "p95_ms": round(_percentile(ordered, 0.95), 3),
         "p99_ms": round(_percentile(ordered, 0.99), 3),
