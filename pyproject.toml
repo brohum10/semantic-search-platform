@@ -22,12 +22,12 @@ classifiers = [
 dependencies = [
   "Flask>=3.1,<4",
   "numpy>=2.0,<3",
-  "gunicorn>=23,<24",
+  "gunicorn>=23,<27",
 ]
 
 [project.optional-dependencies]
 faiss = ["faiss-cpu>=1.9,<2; python_version < '3.14'"]
-dev = ["build>=1.2,<2", "pytest>=8.3,<9", "pytest-cov>=6,<8", "ruff>=0.12,<1"]
+dev = ["build>=1.2,<2", "pytest>=8.3,<10", "pytest-cov>=6,<8", "ruff>=0.12,<1"]
 
 [project.urls]
 Homepage = "https://github.com/brohum10/semantic-search-platform"
